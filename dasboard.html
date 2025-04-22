@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard - Mantenimiento de Peaje</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f9;
+    }
+
+    header {
+      background-color: #003366;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .dashboard {
+      padding: 20px;
+    }
+
+    .formulario {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+
+    .formulario h3 {
+      color: #003366;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    .controls {
+      text-align: center;
+      margin: 20px 0;
+    }
+
+    button {
+      background-color: #003366;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 0 10px;
+    }
+
+    button:hover {
+      background-color: #0055aa;
+    }
+
+    .timestamp {
+      font-size: 0.9em;
+      color: #666;
+    }
+
+    .login-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+
+    .login-box {
+      background-color: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.3);
+      width: 300px;
+      text-align: center;
+    }
+
+    .login-box input {
+      margin: 10px 0;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 20px;
+      border-collapse: collapse;
+    }
+
+    table, th, td {
+      border: 1px solid #ddd;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #003366;
+      color: white;
+    }
+
+    .record-table {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: white;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .semaforo {
+      height: 15px;
+      width: 15px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .verde { background-color: green; }
+    .amarillo { background-color: yellow; }
+    .rojo { background-color: red; }
+
+    .logout {
+      text-align: right;
+      margin-top: -20px;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Dashboard - Mantenimiento de Peaje</h1>
+  </header>
+
+  <div class="logout">
+    <button onclick="cerrarSesion()">Cerrar Sesión</button>
+  </div>
+  <button class="btn" style="margin-top: 15px;" onclick="location.href='index.html'">Regresar a Principal</button>
+  <button class="btn" style="margin-top: 15px;" onclick="location.href='estado.html'">Consultar Estado</button>
+  
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>Iniciar Sesión</h2>
+      <input type="text" id="user" placeholder="Usuario">
+      <input type="password" id="pass" placeholder="Contraseña">
+      <button onclick="login()">Ingresar</button>
+    </div>
+  </div>
+
+  <div class="dashboard">
+    <div class="formulario">
+      <h3>Registrar Mantenimiento</h3>
+      <select id="seccion">
+        <option value="Barreras">Barreras</option>
+        <option value="Energía">Energía</option>
+        <option value="Limpieza">Limpieza</option>
+        <option value="Cámaras">Cámaras</option>
+      </select>
+      <textarea id="descripcion" placeholder="Descripción del mantenimiento..."></textarea>
+      <select id="complejidad">
+        <option value="Baja">Baja</option>
+        <option value="Media">Media</option>
+        <option value="Alta">Alta</option>
+      </select>
+      <div class="controls">
+        <button onclick="guardarRegistro()">Guardar</button>
+        <button onclick="limpiarFormulario()">Limpiar</button>
+        <button onclick="exportarDatos()">Exportar</button>
+      </div>
+    </div>
+
+    <div class="formulario">
+      <h3>Estadísticas</h3>
+      <canvas id="graficoMantenimiento"></canvas>
+    </div>
+
+    <div class="record-table">
+      <h3>Registros Guardados</h3>
+      <table id="tablaRegistros">
+        <thead>
+          <tr>
+            <th>Sección</th>
+            <th>Descripción</th>
+            <th>Fecha</th>
+            <th>Complejidad</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tablaCuerpo"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <audio id="alertaSonido" src="https://www.soundjay.com/button/beep-07.wav"></audio>
+
+  <script>
+    let registros = JSON.parse(localStorage.getItem('registros')) || [];
+
+    function guardarRegistro() {
+      const seccion = document.getElementById('seccion').value;
+      const descripcion = document.getElementById('descripcion').value;
+      const complejidad = document.getElementById('complejidad').value;
+      const fecha = new Date().toLocaleString();
+      registros.push({ seccion, descripcion, fecha, complejidad });
+      localStorage.setItem('registros', JSON.stringify(registros));
+      alert("Mantenimiento guardado");
+      actualizarGrafico();
+      actualizarTabla();
+      limpiarFormulario();
+    }
+
+    function limpiarFormulario() {
+      document.getElementById('descripcion').value = '';
+      document.getElementById('complejidad').value = 'Baja';
+    }
+
+    function exportarDatos() {
+      let contenido = "Mantenimientos Registrados\n\n";
+      registros.forEach(r => {
+        contenido += `Sección: ${r.seccion}\nFecha: ${r.fecha}\nDescripción: ${r.descripcion}\nComplejidad: ${r.complejidad}\n\n`;
+      });
+      const blob = new Blob([contenido], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'mantenimientos.txt';
+      a.click();
+    }
+
+    function actualizarGrafico() {
+      const conteo = { 'Barreras': 0, 'Energía': 0, 'Limpieza': 0, 'Cámaras': 0 };
+      registros.forEach(r => conteo[r.seccion]++);
+      new Chart(document.getElementById("graficoMantenimiento"), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(conteo),
+          datasets: [{
+            label: 'Cantidad de mantenimientos',
+            data: Object.values(conteo),
+            backgroundColor: ['#004c99', '#3366cc', '#6699ff', '#99ccff']
+          }]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    function actualizarTabla() {
+      const tablaCuerpo = document.getElementById('tablaCuerpo');
+      tablaCuerpo.innerHTML = '';
+      registros.forEach((r, index) => {
+        const row = document.createElement('tr');
+        const semaforoClase = r.complejidad === 'Alta' ? 'rojo' : r.complejidad === 'Media' ? 'amarillo' : 'verde';
+        row.innerHTML = `
+          <td>${r.seccion}</td>
+          <td>${r.descripcion}</td>
+          <td>${r.fecha}</td>
+          <td><span class="semaforo ${semaforoClase}"></span> ${r.complejidad}</td>
+          <td><button onclick="editarRegistro(${index})">Editar</button></td>
+        `;
+        tablaCuerpo.appendChild(row);
+      });
+    }
+
+    function editarRegistro(index) {
+      const registro = registros[index];
+      document.getElementById('seccion').value = registro.seccion;
+      document.getElementById('descripcion').value = registro.descripcion;
+      document.getElementById('complejidad').value = registro.complejidad;
+      registros.splice(index, 1);
+      localStorage.setItem('registros', JSON.stringify(registros));
+      actualizarTabla();
+    }
+
+    function login() {
+      const user = document.getElementById('user').value;
+      const pass = document.getElementById('pass').value;
+      if (user === 'admin' && pass === '1235') {
+        alert('Bienvenido, ' + user);
+        document.getElementById('loginOverlay').style.display = 'none';
+      } else {
+        alert('Credenciales incorrectas');
+      }
+    }
+
+    function cerrarSesion() {
+      document.getElementById('loginOverlay').style.display = 'flex';
+    }
+
+    setInterval(() => {
+      if (registros.length > 0) {
+        const audio = document.getElementById('alertaSonido');
+        audio.play();
+        alert('Revisión pendiente de mantenimientos.');
+      }
+    }, 56000);
+
+    window.onload = () => {
+      actualizarGrafico();
+      actualizarTabla();
+    };
+  </script>
+</body>
+</html>
